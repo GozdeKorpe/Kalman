@@ -10,14 +10,15 @@ file = os.path.join(folder, txt)
                
 zed_odom = open(file,"r")
 blank = []
+dt = np.array(blank)
 
 Data = open(file,"r")
 for line in Data:
     secs = line.find("secs:")
     if secs != -1:
-        dt = float(line[secs+6:].strip())
+        dt=np.append(dt,float(line[secs+6:].strip())/1000000000)
                
-        break
+        
 
 x_cor = np.array(blank)
         
@@ -70,11 +71,11 @@ z_vel =np.array(0)
 len_pose = int(np.shape(x_pose)[0])
 
 for i in range(len_pose -1):
-    xv = (x_pose[i+1]-x_pose[i])/dt
+    xv = (x_pose[i+1]-x_pose[i])/dt[i]
     x_vel = np.append(x_vel, xv)
-    yv = (y_pose[i+1]-y_pose[i])/dt
+    yv = (y_pose[i+1]-y_pose[i])/dt[i]
     y_vel = np.append(y_vel, yv)
-    zv = (z_pose[i+1]-z_pose[i])/dt
+    zv = (z_pose[i+1]-z_pose[i])/dt[i]
     z_vel = np.append(z_vel, zv)
        
 
@@ -84,61 +85,93 @@ z_accel =np.array(0)
 len_vel = int(np.shape(x_vel)[0])
 
 for i in range(len_vel -1):
-    xa = (x_vel[i+1]-x_vel[i])/dt
+    xa = (x_vel[i+1]-x_vel[i])/dt[i]
     x_accel = np.append(x_accel, xa)
-    ya = (y_vel[i+1]-y_vel[i])/dt
+    ya = (y_vel[i+1]-y_vel[i])/dt[i]
     y_accel = np.append(y_accel, ya)
-    za = (z_vel[i+1]-z_vel[i])/dt
+    za = (z_vel[i+1]-z_vel[i])/dt[i]
     z_accel = np.append(z_accel, za)
 
       
 
 class KF:
-
-    
-    def Predict() -> None:
-        # X(kp) = Ax(k-1)+Bu+ wk
-        # P(kp) = AP(k-1)AT +Qk
+    all_Xs = np.array(blank)
+    def Start():
         a = 0
-        print(x_pose[0])
+        
         X_initial = x_pose[a]
         vX_initial = x_vel[a]
         Y_initial = y_pose[a]
         vY_initial = y_vel[a]
         X = np.array([X_initial,Y_initial,vX_initial,vY_initial]).reshape(4,1)
-        A = np.array([[1,0,dt,0],[0,1,0,dt],[0,0,1,0],[0,0,0,1]])
+        A = np.array([[1,0,dt[a],0],[0,1,0,dt[a]],[0,0,1,0],[0,0,0,1]])
         u = np.array([x_accel[0],y_accel[0]]).reshape(2,1)
         var_x = np.var(x_pose)
         var_vx = np.var(x_vel)
         var_y = np.var(y_pose)
         var_vy = np.var(y_vel)
         P = np.array([[var_x**2,0,0,0],[0,var_y**2,0,0],[0,0,var_vx**2,0],[0,0,0,var_vy**2]])
-        B = np.array([[0.5 *  dt**2, 0], [0,0.5 * dt**2],[dt, 0],[dt, 0]])
+        B = np.array([[0.5 *  dt[a]**2, 0], [0,0.5 * dt[a]**2],[dt[a], 0],[dt[a], 0]])
         new_x = A.dot(X)+ B.dot(u)
         new_P = A.dot(P).dot(A.T) 
         P = new_P
         X = new_x
-        print(new_P)
+        return X
+    def Predict(i) -> None:
+        # X(kp) = Ax(k-1)+Bu+ wk
+        # P(kp) = AP(k-1)AT +Qk
+        
+        X = KF.Start()
+        A = np.array([[1,0,dt[i],0],[0,1,0,dt[i]],[0,0,1,0],[0,0,0,1]])
+        u = np.array([x_accel[0],y_accel[0]]).reshape(2,1)
+        var_x = np.var(x_pose)
+        var_vx = np.var(x_vel)
+        var_y = np.var(y_pose)
+        var_vy = np.var(y_vel)
+        P = np.array([[var_x**2,0,0,0],[0,var_y**2,0,0],[0,0,var_vx**2,0],[0,0,0,var_vy**2]])
+        B = np.array([[0.5 *  dt[i]**2, 0], [0,0.5 * dt[i]**2],[dt[i], 0],[dt[i], 0]])
+        new0_x = A.dot(X)+ B.dot(u)
+        new_P = A.dot(P).dot(A.T) 
+        P = new_P
+        X = new0_x
+        
 
     
         # y = cX(k) + zk
         # K = P(kp)H / HP(kp)HT+r
         # x = x(kp) + K(Y- HK(p))
         # P = (I - KH)P(kp)
-        
+        X_i = x_pose[i]
+        vX_i = x_vel[i]
+        Y_i = y_pose[i]
+        vY_i = y_vel[i]
+        Xy = np.array([X_i,Y_i,vX_i,vY_i]).reshape(4,1)
         H = np.eye(4)  
         C = np.eye(4)
-        Y = C.dot(X)
+        Y = C.dot(Xy)
         num_1 = P.dot(H)
         num_2 = H.dot(P).dot(H.T)
-        K = np.divide(num_1, num_2)
+        PHT = P.dot(H.T)
+
+        # S = HPH' + R
+        # project system uncertainty into measurement space
+        S = H.dot(PHT)
+        SI =np.linalg.inv(S)
+        # K = PH'inv(S)
+        # map system uncertainty into kalman gain
+        K = PHT.dot(SI)
         new1_x = X + K.dot(Y- (H.dot(Y)))
         I = np.eye(4)
         new_P = (I - K.dot(H)).dot(P)
 
         P = new_P
         X = new1_x
+        KF.all_Xs = np.append(KF.all_Xs, new1_x)
 
-KF.Predict()
+
+KF.Start()
+for i in range(len(x_pose)):
+    KF.Predict(i)
+print(KF.all_Xs)
 
 
