@@ -1,3 +1,4 @@
+
 from tkinter import SEL
 import numpy as np
 import os
@@ -96,61 +97,97 @@ for i in range(len_vel -1):
 
 class KF:
     all_Xs = np.array(blank)
-    def Start():
+    def Start(Dimension:int):
         a = 0
         
         X_initial = x_pose[a]
         vX_initial = x_vel[a]
         Y_initial = y_pose[a]
         vY_initial = y_vel[a]
-        X = np.array([X_initial,Y_initial,vX_initial,vY_initial]).reshape(4,1)
-        A = np.array([[1,0,dt[a],0],[0,1,0,dt[a]],[0,0,1,0],[0,0,0,1]])
-        u = np.array([x_accel[0],y_accel[0]]).reshape(2,1)
+        Z_initial = z_pose[a]
+        vZ_initial = z_vel[a]
+
         var_x = np.var(x_pose)
         var_vx = np.var(x_vel)
         var_y = np.var(y_pose)
         var_vy = np.var(y_vel)
-        P = np.array([[var_x**2,0,0,0],[0,var_y**2,0,0],[0,0,var_vx**2,0],[0,0,0,var_vy**2]])
-        B = np.array([[0.5 *  dt[a]**2, 0], [0,0.5 * dt[a]**2],[dt[a], 0],[dt[a], 0]])
+        var_z = np.var(z_pose)
+        var_vz = np.var(z_vel)
+        
+        if Dimension == 2:
+
+            X = np.array([X_initial,Y_initial,vX_initial,vY_initial]).reshape(4,1)
+            A = np.array([[1,0,dt[a],0],[0,1,0,dt[a]],[0,0,1,0],[0,0,0,1]])
+            u = np.array([x_accel[0],y_accel[0]]).reshape(2,1)
+            P = np.array([[var_x**2,0,0,0],[0,var_y**2,0,0],[0,0,var_vx**2,0],[0,0,0,var_vy**2]])
+            B = np.array([[0.5 *  dt[a]**2, 0], [0,0.5 * dt[a]**2],[dt[a], 0],[dt[a], 0]])
+
+        if Dimension == 3:
+            X = np.array([X_initial,Y_initial,Z_initial,vX_initial,vY_initial,vZ_initial]).reshape(6,1)
+            A = np.array([[1,0,0,dt[a],0,0],[0,1,0,0,dt[a],0],[0,0,1,0,0,dt[a]],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
+            u = np.array([x_accel[a],y_accel[a],z_accel[a]]).reshape(3,1)
+            P = np.array([[var_x**2,0,0,0,0,0],[0,var_y**2,0,0,0,0],[0,0,var_z**2,0,0,0],[0,0,0,var_vx**2,0,0],[0,0,0,0,var_vy**2,0],[0,0,0,0,0,var_vz**2]])
+            B = np.array([[0.5 *  dt[a]**2, 0,0], [0,0.5 * dt[a]**2,0],[0,0,0.5 * dt[a]**2],[dt[a], 0,0],[0,dt[a], 0],[0,0,dt[a]]])
+
+            
+
         new_x = A.dot(X)+ B.dot(u)
-        new_P = A.dot(P).dot(A.T) 
+        new_P = A.dot(P).dot(A.T)
         P = new_P
         X = new_x
-        return X
-    def Predict(i) -> None:
+        A = [X,P]
+        return A
+    def Predict(i, Dimension:int) -> None:
         # X(kp) = Ax(k-1)+Bu+ wk
         # P(kp) = AP(k-1)AT +Qk
         
-        X = KF.Start()
-        A = np.array([[1,0,dt[i],0],[0,1,0,dt[i]],[0,0,1,0],[0,0,0,1]])
-        u = np.array([x_accel[0],y_accel[0]]).reshape(2,1)
-        var_x = np.var(x_pose)
-        var_vx = np.var(x_vel)
-        var_y = np.var(y_pose)
-        var_vy = np.var(y_vel)
-        P = np.array([[var_x**2,0,0,0],[0,var_y**2,0,0],[0,0,var_vx**2,0],[0,0,0,var_vy**2]])
-        B = np.array([[0.5 *  dt[i]**2, 0], [0,0.5 * dt[i]**2],[dt[i], 0],[dt[i], 0]])
-        new0_x = A.dot(X)+ B.dot(u)
-        new_P = A.dot(P).dot(A.T) 
-        P = new_P
-        X = new0_x
-        
-
-    
-        # y = cX(k) + zk
-        # K = P(kp)H / HP(kp)HT+r
-        # x = x(kp) + K(Y- HK(p))
-        # P = (I - KH)P(kp)
+        X = KF.Start(Dimension)[0]
+        P = KF.Start(Dimension)[1]
         X_i = x_pose[i]
         vX_i = x_vel[i]
         Y_i = y_pose[i]
         vY_i = y_vel[i]
-        Xy = np.array([X_i,Y_i,vX_i,vY_i]).reshape(4,1)
-        H = np.eye(4)  
-        C = np.eye(4)
+        Z_i = z_pose[i]
+        vZ_i = z_vel[i]
+        if Dimension == 2:
+            A = np.array([[1,0,dt[i],0],[0,1,0,dt[i]],[0,0,1,0],[0,0,0,1]])
+            u = np.array([x_accel[0],y_accel[0]]).reshape(2,1)      
+            B = np.array([[0.5 *  dt[i]**2, 0], [0,0.5 * dt[i]**2],[dt[i], 0],[dt[i], 0]])
+          
+             
+                    # y = cX(k) + zk
+            # K = P(kp)H / HP(kp)HT+r
+            # x = x(kp) + K(Y- HK(p))
+            # P = (I - KH)P(kp)
+
+            Xy = np.array([X_i,Y_i,vX_i,vY_i]).reshape(4,1)
+            H = np.eye(4)  
+            C = np.eye(4)
+            Y = C.dot(Xy)
+            I = np.eye(4)
+           
+        
+        if Dimension == 3:
+        
+            A = np.array([[1,0,0,dt[i],0,0],[0,1,0,0,dt[i],0],[0,0,1,0,0,dt[i]],[0,0,0,1,0,0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
+            u = np.array([x_accel[i],y_accel[i],z_accel[i]]).reshape(3,1)
+            B = np.array([[0.5 *  dt[i]**2, 0,0], [0,0.5 * dt[i]**2,0],[0,0,0.5 * dt[i]**2],[dt[i], 0,0],[0,dt[i], 0],[0,0,dt[i]]])
+           
+            
+            Xy = np.array([X_i,Y_i,Z_i,vX_i,vY_i,vZ_i]).reshape(6,1)
+            H = np.eye(6)  
+            C = np.eye(6)
+            Y = C.dot(Xy)
+            I = np.eye(6)
+
+
+    
+
+
+        
+
         Y = C.dot(Xy)
-        num_1 = P.dot(H)
-        num_2 = H.dot(P).dot(H.T)
+       
         PHT = P.dot(H.T)
 
         # S = HPH' + R
@@ -161,17 +198,20 @@ class KF:
         # map system uncertainty into kalman gain
         K = PHT.dot(SI)
         new1_x = X + K.dot(Y- (H.dot(Y)))
-        I = np.eye(4)
         new_P = (I - K.dot(H)).dot(P)
 
         P = new_P
         X = new1_x
-        KF.all_Xs = np.append(KF.all_Xs, new1_x)
+        KF.all_Xs = np.append(KF.all_Xs, X)
 
 
-KF.Start()
+KF.Start(2)
 for i in range(len(x_pose)):
-    KF.Predict(i)
+    KF.Predict(i,2)
 print(KF.all_Xs)
+
+
+                
+
 
 
